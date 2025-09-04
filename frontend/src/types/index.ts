@@ -43,15 +43,16 @@ export interface Order {
   userId: string;
   status: "PENDING" | "PAID" | "SHIPPED" | "CANCELLED";
   orderItems: OrderItem[];
+  reservation: any;
 }
 
 export interface Reservation {
   id: string;
   productId: string;
   quantity: number;
-  expiresAt: string; // Stored as a string from the API
+  expiresAt: string;
   isExpired: boolean;
-  product: Product; // Include product details for display
+  product: Product;
 }
 
 export type OrderStatus = "PENDING" | "PAID" | "SHIPPED" | "CANCELLED";

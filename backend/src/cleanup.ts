@@ -1,3 +1,4 @@
+// src/cleanup.ts
 import { PrismaClient, OrderStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -5,15 +6,15 @@ const prisma = new PrismaClient();
 export const cleanupExpiredReservations = async () => {
   const now = new Date();
 
+  // Find all reservations linked to a PENDING order that have expired
   const expiredReservations = await prisma.reservation.findMany({
     where: {
       expiresAt: { lt: now },
-      isExpired: false,
       order: {
         status: OrderStatus.PENDING,
       },
     },
-    include: { product: true },
+    include: { product: true, order: true },
   });
 
   if (expiredReservations.length === 0) {
@@ -32,17 +33,14 @@ export const cleanupExpiredReservations = async () => {
         data: { stock: { increment: reservation.quantity } },
       });
 
-      await tx.reservation.update({
-        where: { id: reservation.id },
-        data: { isExpired: true },
-      });
-
       if (reservation.orderId) {
         await tx.order.update({
           where: { id: reservation.orderId },
           data: { status: OrderStatus.CANCELLED },
         });
       }
+
+      await tx.reservation.delete({ where: { id: reservation.id } });
     }
   });
 

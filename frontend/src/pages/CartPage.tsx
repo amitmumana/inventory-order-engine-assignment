@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// src/pages/CartPage.tsx
+import React, { useEffect, useState, useRef } from "react";
 import api from "../api/axiosClient";
 import { CartItem } from "../types";
 import { Link, useNavigate } from "react-router-dom";
@@ -23,6 +24,7 @@ const CartPage = () => {
   const [error, setError] = useState<string | null>(null);
   const { isAuthenticated, user, updateCartCount } = useAppStore();
   const navigate = useNavigate();
+  const cartFetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchCart = async () => {
@@ -37,13 +39,17 @@ const CartPage = () => {
           setCartItems(response.data);
         }
       } catch (err) {
-        toast.error(`"Failed to fetch cart:", ${err}`);
+        console.error("Failed to fetch cart:", err);
+        setError("Failed to load cart. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCart();
+    if (!cartFetchedRef.current) {
+      fetchCart();
+      cartFetchedRef.current = true;
+    }
   }, [isAuthenticated, user]);
 
   const handleUpdateQuantity = async (
@@ -52,7 +58,7 @@ const CartPage = () => {
     isGuest: boolean
   ) => {
     if (newQuantity <= 0) {
-      await handleRemoveItem(item.id, isGuest);
+      await handleRemoveItem(item, isGuest);
       return;
     }
 
@@ -63,65 +69,73 @@ const CartPage = () => {
           newQuantity,
           item.product!
         );
+        setCartItems(updatedCart);
         const newCount = updatedCart.reduce(
-          (sum, item) => sum + item.quantity,
+          (sum, currentItem) => sum + currentItem.quantity,
           0
         );
         updateCartCount(newCount);
-        setCartItems(updatedCart);
       } else {
         await api.patch(`/cart/items/${item.id}`, { quantity: newQuantity });
-        setCartItems((prevItems) =>
-          prevItems.map((prevItem) =>
-            prevItem.id === item.id
-              ? { ...prevItem, quantity: newQuantity }
-              : prevItem
-          )
+        const updatedCartItems = await api.get("/cart");
+        setCartItems(updatedCartItems.data);
+        const newCount = updatedCartItems.data.reduce(
+          (sum: number, currentItem: any) => sum + currentItem?.quantity,
+          0
         );
+        updateCartCount(newCount);
       }
     } catch (err) {
-      setError("Failed to update cart");
+      console.error("Failed to update item quantity:", err);
+      if (axios.isAxiosError(err) && err.response?.data?.error) {
+        toast.error(err.response.data.error);
+      } else {
+        toast.error("Failed to update item quantity. Not enough stock.");
+      }
     }
   };
 
-  const handleRemoveItem = async (itemId: string, isGuest: boolean) => {
+  const handleRemoveItem = async (item: CartItem, isGuest: boolean) => {
     try {
       if (isGuest) {
-        const updatedCart = updateLocalCart(itemId, 0);
+        const updatedCart = updateLocalCart(item.productId, 0, item.product!);
         setCartItems(updatedCart);
         const newCount = updatedCart.reduce(
-          (sum, item) => sum + item.quantity,
+          (sum, currentItem) => sum + currentItem.quantity,
           0
         );
         updateCartCount(newCount);
       } else {
-        await api.delete(`/cart/items/${itemId}`);
-        setCartItems((prevItems) =>
-          prevItems.filter((item) => item.id !== itemId)
+        await api.delete(`/cart/items/${item.id}`);
+        const updatedCartItems = await api.get("/cart");
+        setCartItems(updatedCartItems.data);
+        const newCount = updatedCartItems.data.reduce(
+          (sum: number, currentItem: any) => sum + currentItem.quantity,
+          0
         );
+        updateCartCount(newCount);
       }
     } catch (err) {
       console.error("Failed to remove item:", err);
-      setError("Failed to remove item from cart.");
+      toast.error("Failed to remove item from cart.");
     }
   };
 
-  const handleBuyNow = async () => {
+  const handleCheckout = async () => {
     if (!isAuthenticated) {
-      alert("You must be logged in to make a purchase.");
+      toast.error("You must be logged in to proceed to checkout.");
       navigate("/login?redirect=cart");
-      return;
-    }
-
-    try {
-      await api.post("/orders/buy-now");
-      alert("Purchase successful! Redirecting to orders page.");
-      navigate("/orders");
-    } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.data?.error) {
-        setError(err.response.data.error);
-      } else {
-        setError("An error occurred during purchase.");
+    } else {
+      try {
+        const response = await api.post("/orders/initiate-checkout");
+        const orderId = response.data.order.id;
+        navigate(`/checkout/${orderId}`);
+      } catch (err) {
+        const errorMessage =
+          axios.isAxiosError(err) && err.response?.data?.error
+            ? err.response.data.error
+            : "An error occurred during checkout initiation.";
+        toast.error(errorMessage);
       }
     }
   };
@@ -132,17 +146,6 @@ const CartPage = () => {
 
   if (error) {
     return <div className="text-center text-red-500 mt-8">{error}</div>;
-  }
-
-  if (cartItems.length === 0) {
-    return (
-      <div className="text-center mt-8">
-        Your cart is empty.{" "}
-        <Link to="/" className="text-blue-500 hover:underline">
-          Go shopping!
-        </Link>
-      </div>
-    );
   }
 
   if (cartItems.length === 0) {
@@ -217,7 +220,7 @@ const CartPage = () => {
                           </div>
                           <button
                             onClick={() =>
-                              handleRemoveItem(item.id, !isAuthenticated)
+                              handleRemoveItem(item, !isAuthenticated)
                             }
                             className="p-1 text-gray-400 hover:text-red-600 transition-colors duration-200"
                             aria-label="Remove item"
@@ -231,7 +234,6 @@ const CartPage = () => {
                         </p>
 
                         <div className="flex items-center justify-between">
-                          {/* Quantity Controls */}
                           <div className="flex items-center border border-gray-200 rounded-lg">
                             <button
                               onClick={() =>
@@ -242,7 +244,6 @@ const CartPage = () => {
                                 )
                               }
                               className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 rounded-l-lg"
-                              // disabled={item.quantity <= 1}
                             >
                               <Minus className="w-4 h-4" />
                             </button>
@@ -283,18 +284,17 @@ const CartPage = () => {
                   {cartItems.reduce((sum, item) => sum + item.quantity, 0)}{" "}
                   items)
                 </span>
-                Rs{totalPrice.toFixed(2)}
+                <span>${totalPrice.toFixed(2)}</span>
               </div>
 
               <button
-                onClick={handleBuyNow}
+                onClick={handleCheckout}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-md hover:shadow-lg active:scale-98 mb-4"
               >
                 <CreditCard className="w-5 h-5" />
-                Buy now
+                Proceed to Checkout
               </button>
 
-              {/* Trust Signals */}
               <div className="space-y-3 pt-4 border-t border-gray-200">
                 <div className="flex items-center gap-3 text-sm text-gray-600">
                   <Shield className="w-4 h-4 text-green-600" />

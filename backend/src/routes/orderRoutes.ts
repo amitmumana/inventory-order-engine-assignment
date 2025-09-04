@@ -5,10 +5,18 @@ import { authMiddleware } from "../middleware/authMiddleware";
 const router = Router();
 const orderController = new OrderController();
 
+router.post(
+  "/initiate-checkout",
+  authMiddleware,
+  orderController.initiateCheckout
+);
+router.post("/:orderId/pay", authMiddleware, orderController.payOrder);
+router.get(
+  "/:orderId/details",
+  authMiddleware,
+  orderController.getOrderDetails
+);
 router.get("/", authMiddleware, orderController.viewMyOrders);
-router.post("/buy-now", authMiddleware, orderController.buyNow);
-router.post("/:orderId/pay", authMiddleware, orderController.pay);
-router.get("/:orderId/status", authMiddleware, orderController.viewStatus);
 router.delete("/:orderId", authMiddleware, orderController.cancelOrder);
 
 export default router;

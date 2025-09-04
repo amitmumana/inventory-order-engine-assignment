@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { CartItem, User } from "./types";
 import api from "./api/axiosClient";
 import { Toaster } from "react-hot-toast";
+import CheckoutPage from "./pages/CheckoutPage";
 
 function App() {
   const { login, logout, updateCartCount } = useAppStore();
@@ -63,6 +64,7 @@ function App() {
             <Route path="/cart" element={<CartPage />} />
 
             <Route element={<PrivateRoute />}>
+              <Route path="/checkout/:orderId" element={<CheckoutPage />} />
               <Route path="/orders" element={<OrderHistoryPage />} />
             </Route>
 

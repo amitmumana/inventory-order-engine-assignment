@@ -39,7 +39,7 @@ const startServer = async () => {
     await prisma.$connect();
     console.log("Database connected successfully.");
 
-    setInterval(cleanupExpiredReservations, 60000);
+    setInterval(cleanupExpiredReservations, 6000);
 
     console.log("Expired reservation cleanup task started.");
 
